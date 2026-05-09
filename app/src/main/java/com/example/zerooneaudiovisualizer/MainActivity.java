@@ -7,6 +7,7 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Bundle;
+import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -18,12 +19,13 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.chibde.visualizer.LineBarVisualizer;
+// Remove the import of the library's visualizer if it's there
+// import com.chibde.visualizer.LineBarVisualizer;
 
 public class MainActivity extends AppCompatActivity {
 
     private AudioRecord audioRecord;
-    private LineBarVisualizer lineBarVisualizer;
+    private RawLineBarVisualizer lineBarVisualizer;
     private boolean isRecording = false;
     private Thread recordingThread;
 
@@ -67,17 +69,17 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        audioRecord = new AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                bufferSize
-        );
+        audioRecord = new AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(new AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(channelConfig)
+                        .build())
+                .setBufferSizeInBytes(bufferSize)
+                .build();
 
         if (audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
-            int audioSessionId = audioRecord.getAudioSessionId();
-            
             lineBarVisualizer.setColor(Color.parseColor("#F7AC36"));
             lineBarVisualizer.setDensity(70);
             
@@ -87,17 +89,13 @@ public class MainActivity extends AppCompatActivity {
             recordingThread = new Thread(() -> {
                 byte[] data = new byte[bufferSize];
                 while (isRecording) {
-                    audioRecord.read(data, 0, bufferSize);
+                    int read = audioRecord.read(data, 0, bufferSize);
+                    if (read > 0 && lineBarVisualizer != null) {
+                        lineBarVisualizer.onRawData(data);
+                    }
                 }
             });
             recordingThread.start();
-
-            try {
-                lineBarVisualizer.setPlayer(audioSessionId);
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, "Visualizer initialization failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            }
         } else {
             Toast.makeText(this, "Failed to initialize AudioRecord", Toast.LENGTH_SHORT).show();
         }
